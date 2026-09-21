@@ -2,10 +2,22 @@
 
 Run **OpenAI's Codex CLI natively on Android**, in Termux, with no glibc, no proot and no VM.
 
-There is no trick here, and that is the point: Codex is Rust, and the published
-`aarch64-unknown-linux-musl` build is **statically linked** — no interpreter to repoint, no
-libc to supply. Android's bionic runs the official binary unmodified. This repo is a small
-installer that fetches it, checks it runs, and puts it on `PATH`.
+Codex is Rust, and the published `aarch64-unknown-linux-musl` build is **fully static** —
+`ET_EXEC`, no `PT_INTERP`, no `DT_NEEDED`. No loader is involved at all: the kernel maps it
+and jumps to the entry point. Nothing needs patching.
+
+It does need one thing, though. musl's resolver is linked *into* the binary and reads
+`/etc/resolv.conf`, which Android does not have, so name lookups fail from inside the
+process. The visible symptom is that `codex login` opens your browser (Android resolves
+that fine), you sign in, and then it fails:
+
+```
+Login server error: Token exchange failed: error sending request
+for url (https://auth.openai.com/oauth/token)
+```
+
+So this repo installs the binaries, builds a small bionic-side DNS proxy, and ships a
+wrapper that starts it and points Codex at it.
 
 ```
 $ codex --version
@@ -30,6 +42,18 @@ Then `codex login`.
 - ~230MB of storage, ~90MB of download
 - A ChatGPT Plus/Pro/Business account or an OpenAI API key
 
+## Code Mode
+
+The Code Mode host is installed but off by default. To enable it, add to
+`~/.codex/config.toml`:
+
+```toml
+[features]
+code_mode_host = true
+```
+
+Skip the download with `./install.sh --no-code-mode` if you do not want it.
+
 ## Don't install it from npm
 
 `npm install -g @openai/codex` gets you a binary that cannot run. The package declares
@@ -45,7 +69,12 @@ The musl binary exists only as a GitHub release asset. That is what `install.sh`
 
 ## What it does
 
-`install.sh` resolves the latest release tag (or takes `--version`, with or without the
+`install.sh` installs three things: the `codex` binary, the **Code Mode host**
+(`codex-code-mode-host`, a separate release asset Codex needs for Code Mode), and a DNS
+proxy built from `dns-proxy.c`. The `codex` on your `PATH` is a wrapper that starts the
+proxy, exports `*_proxy` for the session, and cleans it up on exit.
+
+It resolves the latest release tag (or takes `--version`, with or without the
 `rust-v` prefix), downloads `codex-aarch64-unknown-linux-musl.tar.gz`, and **runs the
 binary to confirm it reports a version before installing it** — so a bad download fails
 before anything lands on `PATH`. The binary goes to `$PREFIX/libexec/codex`, symlinked as

@@ -1,0 +1,68 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Run OpenAI's Codex CLI on Termux.
+#
+# Starts a bionic-side DNS proxy and points Codex at it, then runs the binary.
+#
+#   CODEX_NO_PROXY=1   use ambient proxy settings instead of starting one
+#
+# Codex is statically linked against musl, so its resolver reads
+# /etc/resolv.conf — which Android does not have. Without this, name lookups
+# fail inside the process: the browser half of `codex login` works (Android
+# resolves that), but the token-exchange POST to auth.openai.com does not, and
+# login fails with "Token exchange failed: error sending request".
+#
+# Not "#!/usr/bin/env bash": Android has no /usr/bin/env.
+set -euo pipefail
+
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+LIBEXEC="$PREFIX/libexec/codex"
+BIN="$LIBEXEC/codex"
+PROXY="$LIBEXEC/dns-proxy"
+
+[ -x "$BIN" ] || { echo "codex: $BIN is missing — run install.sh" >&2; exit 1; }
+
+PROXY_PID=""
+cleanup() { [ -n "${PROXY_PID:-}" ] && kill "$PROXY_PID" 2>/dev/null; return 0; }
+trap cleanup EXIT HUP INT TERM
+
+# Only start one if the caller has not already set a proxy.
+if [ -z "${CODEX_NO_PROXY:-}" ] && [ -z "${HTTPS_PROXY:-${https_proxy:-}}" ] \
+   && [ -x "$PROXY" ]; then
+  # The proxy prints its port on stdout then serves until killed. A FIFO rather
+  # than a coproc: this script must not exec (see below), and a coproc's pipe is
+  # awkward to hand to a child that outlives the read.
+  FIFO="$(mktemp -u "${TMPDIR:-$PREFIX/tmp}/codex-proxy.XXXXXX")"
+  if mkfifo "$FIFO" 2>/dev/null; then
+    "$PROXY" > "$FIFO" 2>/dev/null &
+    PROXY_PID=$!
+    read -r -t 15 PORT < "$FIFO" || true
+    rm -f "$FIFO"
+    if [ -n "${PORT:-}" ] && kill -0 "$PROXY_PID" 2>/dev/null; then
+      export http_proxy="http://127.0.0.1:$PORT"
+      export https_proxy="$http_proxy"
+      export HTTP_PROXY="$http_proxy"
+      export HTTPS_PROXY="$http_proxy"
+      export all_proxy="$http_proxy"
+    else
+      PROXY_PID=""
+      echo "codex: DNS proxy did not start; login and network calls may fail" >&2
+    fi
+  fi
+fi
+
+# Rust's crypto stack usually bundles its own roots, but honour Termux's bundle
+# when nothing else is set — it costs nothing and covers builds that do not.
+if [ -z "${SSL_CERT_FILE:-}" ] && [ -r "$PREFIX/etc/tls/cert.pem" ]; then
+  export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
+fi
+
+# Termux preloads a bionic library; harmless for a static binary, but dropped
+# for consistency with the other Termux AI-CLI wrappers.
+unset LD_PRELOAD
+
+# Deliberately not exec: the EXIT trap is what stops the proxy, and exec would
+# replace this shell and orphan it. One idle shell buys deterministic cleanup.
+"$BIN" "$@"
+rc=$?
+cleanup
+exit "$rc"

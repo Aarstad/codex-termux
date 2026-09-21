@@ -14,7 +14,9 @@ DROP_CONFIG=0
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 
 # Only remove the `codex` on PATH if it is ours; a different install keeps its name.
-if [ -L "$PREFIX/bin/codex" ] && [ "$(readlink "$PREFIX/bin/codex")" = "$LIBEXEC/codex" ]; then
+# The wrapper on PATH is ours if it mentions our libexec directory; anything
+# else there belongs to a different install and is left alone.
+if [ -f "$PREFIX/bin/codex" ] && grep -q 'libexec/codex' "$PREFIX/bin/codex" 2>/dev/null; then
   rm -f "$PREFIX/bin/codex"
   say "removed $PREFIX/bin/codex"
 elif [ -e "$PREFIX/bin/codex" ]; then
@@ -23,7 +25,7 @@ fi
 
 freed="$(du -ms "$LIBEXEC" 2>/dev/null | cut -f1 || echo 0)"
 rm -rf "$LIBEXEC"
-say "removed the binary (${freed}MB)"
+say "removed the binaries and DNS proxy (${freed}MB)"
 
 if [ "$DROP_CONFIG" = 1 ]; then
   rm -rf "$HOME/.codex"
