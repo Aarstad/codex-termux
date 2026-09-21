@@ -1,160 +1,213 @@
-# codex-termux
+# Codex for Termux
 
-Run **OpenAI's Codex CLI natively on Android**, in Termux, with no glibc, no proot and no VM.
+Run OpenAI's Codex CLI on an Android phone through Termux. Codex can help you
+understand code, edit files, and run commands from your terminal.
 
-Codex is Rust, and the published `aarch64-unknown-linux-musl` build is **fully static** —
-`ET_EXEC`, no `PT_INTERP`, no `DT_NEEDED`. No loader is involved at all: the kernel maps it
-and jumps to the entry point. Nothing needs patching.
+This community installer sets up the native ARM64 binary and a small proxy that
+makes its network connections work on Android. No root, proot, or VM is needed.
 
-It does need one thing, though. musl's resolver is linked *into* the binary and reads
-`/etc/resolv.conf`, which Android does not have, so name lookups fail from inside the
-process. The visible symptom is that `codex login` opens your browser (Android resolves
-that fine), you sign in, and then it fails:
+## What you need
 
-```
-Login server error: Token exchange failed: error sending request
-for url (https://auth.openai.com/oauth/token)
-```
+- Termux on an ARM64 Android device. Run `uname -m`: it should print `aarch64`.
+- A ChatGPT account with Codex access, or an OpenAI API key. API usage is billed
+  separately; see [OpenAI's sign-in guide](https://learn.chatgpt.com/docs/auth).
+- Space for the download, extracted binaries, and Termux build tools. Allow several
+  hundred megabytes; the exact amount varies by release and installed packages.
 
-So this repo installs the binaries, builds a small bionic-side DNS proxy, and ships a
-wrapper that starts it and points Codex at it.
+## 1. Install
 
-```
-$ codex --version
-codex-cli 0.155.1
-```
-
-## Install
+Run these commands **inside Termux**:
 
 ```bash
-git clone https://github.com/Aarstad/codex-termux
+pkg update
+pkg install git curl tar gzip clang
+
+git clone https://github.com/Aarstad/codex-termux.git
 cd codex-termux
-./install.sh                    # latest release
-./install.sh --version 0.155.1  # or pin one
+./install.sh
 ```
 
-Then `codex login`.
+The installer downloads Codex and builds the small networking helper. When it
+finishes, check:
 
-## Requirements
+```bash
+codex --version
+```
 
-- Termux on aarch64
-- `curl`, `tar`, `gzip`
-- `clang` (for the DNS proxy)
-- ~300MB of storage, ~115MB of download
-- A ChatGPT Plus/Pro/Business account or an OpenAI API key
+Use this installer for the Termux setup described here. It selects the musl
+release build and installs the launcher that provides the networking workaround.
 
-## Code Mode
+## 2. Sign in
 
-The Code Mode host is installed but off by default. To enable it, add to
-`~/.codex/config.toml`:
+```bash
+codex login
+```
+
+Follow the browser sign-in instructions, then return to Termux. If the browser
+does not open automatically, open the URL printed in the terminal.
+
+Check that sign-in completed:
+
+```bash
+codex login status
+```
+
+For API-key sign-in or a browser callback problem, see
+[Login and network problems](#login-and-network-problems) below.
+
+## 3. Start Codex with the Termux settings
+
+Codex's Linux command sandbox does not work on the Android setup tested here.
+The command below disables that sandbox and turns off animations, which fixed a
+Termux glitch that kept scrolling to the bottom of the conversation.
+
+**With the command sandbox disabled, Codex can access files and run commands with
+your Termux permissions.** It is not confined to the current project. Android's
+app permissions still apply, including any shared-storage access you have granted
+Termux. Approval prompts are a separate setting; do not assume every command will
+ask first. See [OpenAI's security guide](https://learn.chatgpt.com/docs/agent-approvals-security).
+
+Start in a practice folder, or change into a project you want to work on:
+
+```bash
+mkdir -p ~/projects/codex-playground
+cd ~/projects/codex-playground
+codex --sandbox danger-full-access -c tui.animations=false
+```
+
+For a first task, try: **“Create a simple HTML page that says hello.”**
+
+### Save these settings for future sessions
+
+To avoid typing the flags each time, put these settings in
+`~/.codex/config.toml`. If you are new to terminal editors:
+
+```bash
+pkg install nano
+mkdir -p ~/.codex
+nano ~/.codex/config.toml
+```
+
+For an otherwise empty config file:
 
 ```toml
-[features]
-code_mode_host = true
+sandbox_mode = "danger-full-access"
+
+[tui]
+animations = false
 ```
 
-Skip the download with `./install.sh --no-code-mode` if you do not want it.
+If the file already has settings, preserve them: put `sandbox_mode` at the top,
+**before any `[section]`**, or update its existing top-level entry. Put
+`animations = false` under the existing `[tui]` section, or add that section if
+missing. Do not create duplicate keys or sections.
 
-## Don't install it from npm
-
-`npm install -g @openai/codex` gets you a binary that cannot run. The package declares
-optional dependencies for `linux-arm64`, `darwin-arm64` and friends — but the Linux ones
-are **glibc** builds, and there is no musl entry at all:
-
-```
-$ npm view @openai/codex optionalDependencies | grep -c musl
-0
-```
-
-The musl binary exists only as a GitHub release asset. That is what `install.sh` fetches.
-
-## What it does
-
-`install.sh` installs three things: the `codex` binary, the **Code Mode host**
-(`codex-code-mode-host`, a separate release asset Codex needs for Code Mode), and a DNS
-proxy built from `dns-proxy.c`. The `codex` on your `PATH` is a wrapper that starts the
-proxy, exports `*_proxy` for the session, and cleans it up on exit.
-
-It resolves the latest release tag (or takes `--version`, with or without the
-`rust-v` prefix), downloads `codex-aarch64-unknown-linux-musl.tar.gz`, and **runs the
-binary to confirm it reports a version before installing it** — so a bad download fails
-before anything lands on `PATH`. The binaries go to `$PREFIX/libexec/codex`, and the wrapper is installed as
-`$PREFIX/bin/codex`.
-
-It also clears `~/.codex/tmp/arg0`. Codex resolves its helper commands
-(`codex-linux-sandbox`, `codex-execve-wrapper`, `apply_patch`) through `argv[0]` symlinks
-cached there and pinned to wherever the binary lived at first run. Installing from a
-different directory later leaves them dangling, which is a confusing failure; clearing
-them lets Codex recreate them against the current path.
-
-## The sandbox does not work, and cannot
-
-`codex sandbox` needs bubblewrap, which needs unprivileged user namespaces. Android does
-not grant them — `unshare -Ur` fails and there is no
-`/proc/sys/user/max_user_namespaces` — so `bwrap` cannot start even if you build it:
-
-```
-thread 'main' panicked at linux-sandbox/src/launcher.rs:51:13:
-bubblewrap is unavailable
-```
-
-Run Codex with the sandbox off instead:
+In nano, save with **Ctrl+O**, press **Enter**, then exit with **Ctrl+X**. Restart
+Codex after changing the file. From then on, start it from your project folder with:
 
 ```bash
-codex --sandbox danger-full-access
+codex
 ```
 
-or set `sandbox_mode` in `~/.codex/config.toml`. `install.sh` prints this when it detects
-the kernel denies namespaces.
+## Troubleshooting
 
-**Know what you are trading.** Termux already runs inside Android's application sandbox,
-so this removes a second layer rather than the only one — Codex still cannot reach outside
-Termux's own data directory. But within it, model-generated commands run with your normal
-permissions and no approval step. Codex's own docs intend this flag for environments that
-are "externally sandboxed", which Termux is; that is a weaker claim than "it is safe".
+### Screen keeps jumping down / cannot scroll up
 
-## Everything else works
+Codex's animated sparkles, shimmer, or spinner can cause repeated scrolling to the
+bottom in Termux. Disabling animations fixed this on our test device.
 
-`codex doctor` passes every environment check on Termux — disk, git, ripgrep, locale,
-terminal, state, config, install consistency, auth and reachability. Login, authenticated
-API calls and interactive sessions all work.
+Use `-c tui.animations=false` when launching, or save `animations = false` under
+`[tui]` as shown above, then restart Codex. This is the setting documented in the
+[official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
 
-Run the raw binary without the wrapper and `doctor` reports `✗ reachability — one or more
-required provider endpoints are unreachable`, which is the DNS problem above.
+### “bubblewrap is unavailable” or sandbox errors
+
+Use `--sandbox danger-full-access` or save the setting from step 3. On the tested
+Android kernel, the Linux sandbox's required user namespaces are unavailable;
+installing a `bwrap` executable alone does not solve that.
+
+### Login and network problems
+
+If you see **“Token exchange failed”** after browser sign-in, or health checks
+report unreachable endpoints, first make sure you are using the installed launcher:
+
+```bash
+command -v codex
+codex doctor
+```
+
+`command -v codex` should point to `$PREFIX/bin/codex` (normally
+`/data/data/com.termux/files/usr/bin/codex`). Run `codex`, rather than the executable
+inside `libexec/codex`, so the networking helper is started. If you have configured
+`HTTPS_PROXY`, `https_proxy`, or `CODEX_NO_PROXY`, check those settings too: they can
+bypass the bundled helper.
+
+If browser sign-in cannot return to the CLI, try device-code login:
+
+```bash
+codex login --device-auth
+```
+
+Device-code login may need enabling in your ChatGPT security settings or workspace
+permissions. For API-key login, if `OPENAI_API_KEY` is already set in your shell:
+
+```bash
+printenv OPENAI_API_KEY | codex login --with-api-key
+```
+
+See [OpenAI's authentication guide](https://learn.chatgpt.com/docs/auth) for details.
+When reporting an issue, include `codex --version`, `uname -m`, and the error text;
+remove credentials and other private information from anything you share.
+
+## Update or install a specific version
+
+Close running Codex sessions first. In the folder where you cloned this repository:
+
+```bash
+git pull --ff-only
+./install.sh
+```
+
+Then start Codex again. This updates the launcher and proxy as well as Codex.
+Your settings and sign-in are retained.
+
+To request a particular Codex release instead, pass its version, for example:
+
+```bash
+./install.sh --version 0.155.1
+```
+
+That is a version-pinning example, not a claim about the latest release.
 
 ## Uninstall
 
+Close Codex, then run this from the cloned repository:
+
 ```bash
-./uninstall.sh            # removes the binaries, the proxy and the wrapper
-./uninstall.sh --config   # …and ~/.codex
+./uninstall.sh
 ```
 
-`~/.codex` — settings, credentials, session history — is not touched unless you ask.
+This removes the installed executables and launcher, while keeping your settings,
+credentials, and conversation history. To delete those too, use
+`./uninstall.sh --config` instead; it removes `~/.codex`.
 
-## What about Claude Code and Antigravity?
+## How it works
 
-**Claude Code** needs real work to run here: Anthropic's musl build is *dynamically*
-linked, so it needs a musl loader placed and its interpreter repointed, plus a DNS shim
-and `LD_PRELOAD` handling. That is a separate project:
-[claude-code-termux-musl](https://github.com/Aarstad/claude-code-termux-musl).
+The installer uses OpenAI's static musl build, which runs directly on this Android
+setup. Its built-in DNS resolver expects a conventional Linux setup, so networking
+needs help. The launcher starts a small C proxy that resolves names through
+Android and forwards connections for Codex.
 
-**Google's Antigravity CLI** (`agy`) is the hard case, but it does run natively now:
-[agy-termux-musl](https://github.com/Aarstad/agy-termux-musl). It ships glibc-only, so it
-needs a musl loader, a ten-symbol shim, the same DNS proxy, a CA-bundle path, and 24 bytes
-of binary patches for two hardcoded glibc layout assumptions (reported upstream as
-[#1075](https://github.com/google-antigravity/antigravity-cli/issues/1075) and
-[#1079](https://github.com/google-antigravity/antigravity-cli/issues/1079)). It also
-bundles TCMalloc, which assumes a 48-bit address space and aborts on the 39-bit-VA kernels
-most Android devices use — that part is
-[wallentx's](https://github.com/wallentx/antigravity-cli-termux) 82-byte patch, and is
-independent of libc.
+For installation paths, the optional Code Mode host, proxy tests, and memory
+measurements, see the [development notes](docs/development.md).
 
-## Credits
+## Related projects and credits
 
-- OpenAI, for publishing a static musl build — no loader, no patching, no disassembly.
-- [wallentx](https://github.com/wallentx), for the Termux launcher work that mapped out
-  most of these problems in the first place.
+Looking for another CLI on Termux?
+[Claude Code](https://github.com/Aarstad/claude-code-termux-musl) and
+[Antigravity](https://github.com/Aarstad/agy-termux-musl) have separate installers.
 
-## License
+Thanks to OpenAI for publishing the musl build, and
+[wallentx](https://github.com/wallentx) for the Termux launcher groundwork.
 
-MIT
+[MIT license](LICENSE).
