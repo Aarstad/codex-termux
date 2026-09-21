@@ -39,7 +39,8 @@ Then `codex login`.
 
 - Termux on aarch64
 - `curl`, `tar`, `gzip`
-- ~230MB of storage, ~90MB of download
+- `clang` (for the DNS proxy)
+- ~300MB of storage, ~115MB of download
 - A ChatGPT Plus/Pro/Business account or an OpenAI API key
 
 ## Code Mode
@@ -77,7 +78,7 @@ proxy, exports `*_proxy` for the session, and cleans it up on exit.
 It resolves the latest release tag (or takes `--version`, with or without the
 `rust-v` prefix), downloads `codex-aarch64-unknown-linux-musl.tar.gz`, and **runs the
 binary to confirm it reports a version before installing it** — so a bad download fails
-before anything lands on `PATH`. The binary goes to `$PREFIX/libexec/codex`, symlinked as
+before anything lands on `PATH`. The binaries go to `$PREFIX/libexec/codex`, and the wrapper is installed as
 `$PREFIX/bin/codex`.
 
 It also clears `~/.codex/tmp/arg0`. Codex resolves its helper commands
@@ -115,14 +116,16 @@ are "externally sandboxed", which Termux is; that is a weaker claim than "it is 
 ## Everything else works
 
 `codex doctor` passes every environment check on Termux — disk, git, ripgrep, locale,
-terminal, state, config, install consistency. Subcommands, config loading and TLS are all
-fine. The two things it flags are `auth` (until you log in) and a WebSocket warning; the
-latter is a transport preference and Codex falls back to HTTPS on its own.
+terminal, state, config, install consistency, auth and reachability. Login, authenticated
+API calls and interactive sessions all work.
+
+Run the raw binary without the wrapper and `doctor` reports `✗ reachability — one or more
+required provider endpoints are unreachable`, which is the DNS problem above.
 
 ## Uninstall
 
 ```bash
-./uninstall.sh            # removes the binary and the PATH symlink
+./uninstall.sh            # removes the binaries, the proxy and the wrapper
 ./uninstall.sh --config   # …and ~/.codex
 ```
 
@@ -135,28 +138,20 @@ linked, so it needs a musl loader placed and its interpreter repointed, plus a D
 and `LD_PRELOAD` handling. That is a separate project:
 [claude-code-termux-musl](https://github.com/Aarstad/claude-code-termux-musl).
 
-**Google's Antigravity CLI** (`agy`) does not run natively, and it is the hard case.
-Despite being Go — usually a static-binary language — it ships with cgo enabled, so it is
-a dynamic PIE needing `/lib/ld-linux-aarch64.so.1` and `GLIBC_2.26`, with no musl asset
-published. Worse, it bundles TCMalloc, which assumes a 48-bit virtual address space and
-aborts before startup on the 39-bit-VA kernels most Android devices use
-([#9](https://github.com/google-antigravity/antigravity-cli/issues/9),
-[#64](https://github.com/google-antigravity/antigravity-cli/issues/64) — the latter on an
-ARM64 router, not Android at all). That failure is independent of libc, so it happens
-inside proot too.
-
-[wallentx/antigravity-cli-termux](https://github.com/wallentx/antigravity-cli-termux/releases)
-publishes patched native builds that work. Note they are *not* a musl port: the package is
-a small bionic bootstrapper that clears `LD_PRELOAD` and re-execs the patched engine
-against `$PREFIX/glibc/lib/ld-linux-aarch64.so.1`, so it needs Termux's full glibc
-package. A musl build of `agy` is not currently possible from the published artifacts —
-the payload is linked against `libc.so.6` and wants glibc-only symbols. It would take a
-`CGO_ENABLED=0` build from Google, plus the VA fix.
+**Google's Antigravity CLI** (`agy`) is the hard case, but it does run natively now:
+[agy-termux-musl](https://github.com/Aarstad/agy-termux-musl). It ships glibc-only, so it
+needs a musl loader, a ten-symbol shim, the same DNS proxy, a CA-bundle path, and 24 bytes
+of binary patches for two hardcoded glibc layout assumptions (reported upstream as
+[#1075](https://github.com/google-antigravity/antigravity-cli/issues/1075) and
+[#1079](https://github.com/google-antigravity/antigravity-cli/issues/1079)). It also
+bundles TCMalloc, which assumes a 48-bit address space and aborts on the 39-bit-VA kernels
+most Android devices use — that part is
+[wallentx's](https://github.com/wallentx/antigravity-cli-termux) 82-byte patch, and is
+independent of libc.
 
 ## Credits
 
-- OpenAI, for publishing a static musl build — which is why this repo is 150 lines and not
-  a research project.
+- OpenAI, for publishing a static musl build — no loader, no patching, no disassembly.
 - [wallentx](https://github.com/wallentx), for the Termux launcher work that mapped out
   most of these problems in the first place.
 
