@@ -192,11 +192,17 @@ credentials, and conversation history. To delete those too, use
 `./uninstall.sh --config` instead; it removes `~/.codex`.
 
 ## How it works
-
+ 
 The installer uses OpenAI's static musl build, which runs directly on this Android
-setup. Its built-in DNS resolver expects a conventional Linux setup, so networking
-needs help. The launcher starts a small C proxy that resolves names through
-Android and forwards connections for Codex.
+setup. Its built-in DNS resolver expects a conventional Linux setup (`/etc/resolv.conf`),
+so networking needs help.
+
+The launcher bridges this seamlessly:
+- Detects if the shared `termux-dns-proxy` daemon is active on `127.0.0.1:18080` and reuses
+  it immediately with zero startup delay and zero process proliferation.
+- If not running, it automatically spawns an ephemeral companion C proxy that resolves names
+  through Android's bionic resolver and terminates when Codex exits.
+- Respects existing ambient `http_proxy` / `https_proxy` or `CODEX_NO_PROXY=1`.
 
 For installation paths, the optional Code Mode host, proxy tests, and memory
 measurements, see the [development notes](docs/development.md).
