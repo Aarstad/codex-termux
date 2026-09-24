@@ -105,6 +105,9 @@ say "building the DNS proxy"
 cc -O2 -o "$LIBEXEC/dns-proxy" "$HERE/dns-proxy.c" || die "could not build the DNS proxy"
 
 install -m 755 "$HERE/codex" "$PREFIX/bin/codex"
+# codex-update needs this checkout to rerun install.sh, so its path is baked in.
+sed "s|@SRC@|$HERE|" "$HERE/codex-update" > "$PREFIX/bin/codex-update" \
+  && chmod 755 "$PREFIX/bin/codex-update" || die "could not install codex-update"
 rm -rf "$tmp"; trap - EXIT
 
 # Those helper symlinks are cached under ~/.codex/tmp/arg0 and pinned to the path
@@ -141,4 +144,5 @@ echo
 echo "  run it with:   codex"
 echo "  log in first:  codex login"
 echo "  check health:  codex doctor"
+echo "  update it:     codex-update"
 echo "  remove it:     ./uninstall.sh"

@@ -23,6 +23,8 @@ elif [ -e "$PREFIX/bin/codex" ]; then
   say "left $PREFIX/bin/codex alone (not installed by us)"
 fi
 
+rm -f "$PREFIX/bin/codex-update"
+
 freed="$(du -ms "$LIBEXEC" 2>/dev/null | cut -f1 || echo 0)"
 rm -rf "$LIBEXEC"
 say "removed the binaries and DNS proxy (${freed}MB)"

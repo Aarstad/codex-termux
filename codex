@@ -21,6 +21,12 @@ PROXY="$LIBEXEC/dns-proxy"
 
 [ -x "$BIN" ] || { echo "codex: $BIN is missing — run install.sh" >&2; exit 1; }
 
+# The built-in updater only knows npm, Homebrew and friends and gives up on this
+# install ("Could not detect the Codex installation method"), so hand off.
+if [ "${1:-}" = update ] && command -v codex-update >/dev/null 2>&1; then
+  shift; exec codex-update "$@"
+fi
+
 PROXY_PID=""
 cleanup() { [ -n "${PROXY_PID:-}" ] && kill "$PROXY_PID" 2>/dev/null; return 0; }
 trap cleanup EXIT HUP INT TERM

@@ -1,0 +1,118 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# codex-update — update the static Codex build that the `codex` wrapper runs.
+#
+# Codex's own `codex update` only knows npm, Homebrew and the like, so on this
+# install it stops with "Could not detect the Codex installation method". This
+# checks GitHub for the latest release, keeps the current binary for rollback,
+# and hands the install to install.sh from the codex-termux checkout, which
+# verifies the download before it replaces anything.
+#
+#   codex-update              update to the latest release
+#   codex-update --check      report versions, change nothing
+#   codex-update --force      reinstall even if already current
+#   codex-update --version X  install a specific release
+#   codex-update --rollback   restore the previous binary
+#   codex-update --no-backup  do not keep the previous binary (saves ~220MB)
+#
+# Not "#!/usr/bin/env bash": Android has no /usr/bin/env.
+set -uo pipefail
+
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+LIBEXEC="$PREFIX/libexec/codex"
+BIN="$LIBEXEC/codex"
+PREV="$LIBEXEC/codex.prev"
+REPO="${CODEX_REPO:-openai/codex}"
+# install.sh writes the checkout path here when it installs this script;
+# CODEX_TERMUX_DIR overrides it if the clone has moved.
+SRC="${CODEX_TERMUX_DIR:-@SRC@}"
+NEED_MB=700          # tarballs + extracted copies + the backup, with headroom
+
+CHECK=0; FORCE=0; WANT=""; BACKUP=1; ROLLBACK=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check)     CHECK=1 ;;
+    --force)     FORCE=1 ;;
+    --no-backup) BACKUP=0 ;;
+    --rollback)  ROLLBACK=1 ;;
+    --version)   shift; WANT="${1:?--version needs a value}" ;;
+    -h|--help)   sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *)           echo "codex-update: unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+die() { echo "codex-update: $*" >&2; exit 1; }
+
+if [ "$ROLLBACK" = 1 ]; then
+  [ -f "$PREV" ] || die "no previous binary at $PREV"
+  mv -f "$PREV" "$BIN.rollback.$$" && mv -f "$BIN" "$PREV" \
+    && mv -f "$BIN.rollback.$$" "$BIN" || die "rollback failed"
+  # The argv[0] helper symlinks are pinned to the binary they were made for.
+  rm -rf "$HOME/.codex/tmp/arg0" 2>/dev/null || true
+  echo "rolled back to $("$BIN" --version 2>/dev/null || echo unknown)"
+  echo "(the version you rolled away from is kept at $PREV)"
+  exit 0
+fi
+
+command -v curl >/dev/null || die "curl is required (pkg install curl)"
+[ -x "$SRC/install.sh" ] \
+  || die "install.sh not found in $SRC — set CODEX_TERMUX_DIR to your codex-termux checkout"
+
+# "codex-cli 0.155.1" -> "0.155.1"
+current="$("$BIN" --version 2>/dev/null | awk '{print $NF}')"
+[ -n "$current" ] || current="(none installed)"
+
+if [ -n "$WANT" ]; then
+  version="${WANT#rust-v}"
+else
+  meta="$(timeout 120 curl -sSL -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null)" \
+    || die "could not reach the GitHub API"
+  [ -n "$meta" ] || die "empty response from the GitHub API"
+  tag="$(printf '%s' "$meta" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  if [ -z "$tag" ]; then
+    # A rate-limit reply is valid JSON with a "message" and no tag_name.
+    msg="$(printf '%s' "$meta" | sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+    die "${msg:-no tag_name in the GitHub response}"
+  fi
+  version="${tag#rust-v}"
+fi
+[ -n "$version" ] || die "could not determine which version to install"
+
+echo "installed: $current"
+echo "available: $version"
+
+if [ "$CHECK" = 1 ]; then
+  [ "$current" = "$version" ] && echo "up to date." || echo "run without --check to update."
+  exit 0
+fi
+if [ "$current" = "$version" ] && [ "$FORCE" != 1 ]; then
+  echo "already current; use --force to reinstall."
+  exit 0
+fi
+
+if pgrep -f "$BIN" >/dev/null 2>&1; then
+  die "Codex is running; close it and try again"
+fi
+
+avail_mb="$(df -Pm "$LIBEXEC" 2>/dev/null | awk 'NR==2{print $4}')"
+if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$NEED_MB" ]; then
+  die "need about ${NEED_MB}MB free, have ${avail_mb}MB"
+fi
+
+# Keep the current build under a second name. install.sh replaces the binary
+# with `install`, which unlinks first, so a hard link goes on pointing at the
+# old inode — no 220MB copy, and nothing to undo if the update fails.
+if [ "$BACKUP" = 1 ] && [ -f "$BIN" ]; then
+  ln -f "$BIN" "$PREV" 2>/dev/null || cp -f "$BIN" "$PREV" \
+    || die "could not set the previous version aside"
+fi
+
+extra=()
+[ -x "$LIBEXEC/codex-code-mode-host" ] || extra+=(--no-code-mode)
+"$SRC/install.sh" --version "$version" "${extra[@]}" \
+  || die "install.sh could not install $version; the installed binary is unchanged"
+
+if [ "$BACKUP" = 1 ] && [ -f "$PREV" ]; then
+  echo "previous kept at $PREV (codex-update --rollback, or delete to save $(du -m "$PREV" | awk '{print $1}')MB)"
+fi

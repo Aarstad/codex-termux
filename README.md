@@ -161,20 +161,35 @@ remove credentials and other private information from anything you share.
 
 ## Update or install a specific version
 
-Close running Codex sessions first. In the folder where you cloned this repository:
+Codex's own `codex update` cannot work here: it only recognises npm, Homebrew
+and similar installers, and stops with "Could not detect the Codex installation
+method". Use the updater this repository installs instead (`codex update` is
+redirected to it):
+
+```bash
+codex-update            # update to the latest release
+codex-update --check    # just compare installed and latest versions
+codex-update --rollback # go back to the previous binary
+```
+
+It keeps the previous binary as `codex.prev` next to the new one (pass
+`--no-backup` to skip that, or delete the file later). It reruns `install.sh`
+from the folder where you cloned this repository, so keep that clone around;
+if you move it, set `CODEX_TERMUX_DIR` to the new location. Your settings and
+sign-in are retained.
+
+To pick up changes to the launcher or DNS proxy as well, pull this repository
+and reinstall:
 
 ```bash
 git pull --ff-only
 ./install.sh
 ```
 
-Then start Codex again. This updates the launcher and proxy as well as Codex.
-Your settings and sign-in are retained.
-
 To request a particular Codex release instead, pass its version, for example:
 
 ```bash
-./install.sh --version 0.155.1
+codex-update --version 0.155.1
 ```
 
 That is a version-pinning example, not a claim about the latest release.
