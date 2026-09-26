@@ -13,7 +13,7 @@ It installs:
 | `$PREFIX/bin/codex` | Shell launcher |
 | `$PREFIX/libexec/codex/codex` | Upstream Codex executable |
 | `$PREFIX/libexec/codex/codex-code-mode-host` | Optional Code Mode executable |
-| `$PREFIX/libexec/codex/dns-proxy` | Locally compiled proxy |
+| `$PREFIX/libexec/codex/termux-http-proxy` | Locally compiled proxy |
 
 The launcher starts a loopback HTTP/CONNECT proxy when no HTTPS proxy is already
 configured. It sets proxy environment variables for Codex and stops its proxy
@@ -58,7 +58,7 @@ from the repository root.
 python3 tests/test_proxy.py
 python3 tests/measure_memory.py
 # Optional comparison with the sibling project's existing JavaScript implementation:
-python3 tests/measure_memory.py --bun-js ../claude-code-termux-musl/libexec/dns-proxy.js
+python3 tests/measure_memory.py --bun-js ../claude-code-termux-musl/libexec/termux-http-proxy.js
 ```
 
 Tests require Python 3 and a C compiler with AddressSanitizer support. They cover
@@ -97,7 +97,7 @@ buffers. The benchmark uses an ordinary `-O2` build, without AddressSanitizer.
 The installer writes directly to installation paths, so close Codex sessions
 before running it. For proxy-only development updates, compile a new executable
 to a different filename in the installed proxy's directory, verify it, save a
-backup, then atomically rename the new file over `dns-proxy`.
+backup, then atomically rename the new file over `termux-http-proxy`.
 
 Do not compile directly onto a running executable. Existing processes continue
 using the old file after the rename; new launches use the replacement. Restart
@@ -105,6 +105,6 @@ Codex to launch the new proxy. A session inheriting an existing HTTPS proxy may
 reuse that proxy instead.
 
 The sibling projects currently contain copies of this C source at
-`../claude-code-termux-musl/libexec/dns-proxy.c` and
-`../agy-termux-musl/dns-proxy.c`. When changing shared behavior, compare those
+`../claude-code-termux-musl/libexec/termux-http-proxy.c` and
+`../agy-termux-musl/termux-http-proxy.c`. When changing shared behavior, compare those
 copies and run this regression suite against each updated source.

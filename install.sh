@@ -44,7 +44,7 @@ command -v tar  >/dev/null || die "tar is required"
 # tar shells out to gzip; without it extraction fails in a way that looks like a
 # corrupt download rather than a missing tool.
 command -v gzip >/dev/null || die "gzip is required (pkg install gzip)"
-command -v cc   >/dev/null || die "a compiler is required for the DNS proxy (pkg install clang)"
+command -v cc   >/dev/null || die "a compiler is required for the proxy (pkg install clang)"
 
 # --- resolve the release -----------------------------------------------------
 if [ "$VERSION" = latest ]; then
@@ -101,8 +101,9 @@ if [ "$CODE_MODE" = 1 ]; then
   install -m 755 "$tmp/codex-code-mode-host" "$LIBEXEC/codex-code-mode-host"
 fi
 
-say "building the DNS proxy"
-cc -O2 -o "$LIBEXEC/dns-proxy" "$HERE/dns-proxy.c" || die "could not build the DNS proxy"
+say "building the proxy"
+cc -O2 -o "$LIBEXEC/termux-http-proxy" "$HERE/termux-http-proxy.c" || die "could not build the proxy"
+rm -f "$LIBEXEC/dns-proxy" # Its name before the rename
 
 install -m 755 "$HERE/codex" "$PREFIX/bin/codex"
 # codex-update needs this checkout to rerun install.sh, so its path is baked in.

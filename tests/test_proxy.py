@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 SOURCE = str(Path(os.environ.get(
-    'PROXY_SOURCE', Path(__file__).resolve().parents[1] / 'dns-proxy.c')).resolve())
+    'PROXY_SOURCE', Path(__file__).resolve().parents[1] / 'termux-http-proxy.c')).resolve())
 
 
 def build(directory, name, *defines):

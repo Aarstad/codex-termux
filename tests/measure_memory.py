@@ -1,6 +1,6 @@
 """Measure release-build process memory on Linux/Android; no installation needed.
 
-python3 tests/measure_memory.py --bun-js ../claude-code-termux-musl/libexec/dns-proxy.js
+python3 tests/measure_memory.py --bun-js ../claude-code-termux-musl/libexec/termux-http-proxy.js
 RSS/PSS exclude socket/pipe kernel memory. Results are workload/device specific.
 """
 import argparse
@@ -101,14 +101,14 @@ def measure(command, tunnels):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1] / 'dns-proxy.c')
+    parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1] / 'termux-http-proxy.c')
     parser.add_argument('--bun-js', type=Path)
     parser.add_argument('--tunnels', type=int, default=8)
     args = parser.parse_args()
     if not 1 <= args.tunnels <= 32:
         parser.error('--tunnels must be between 1 and 32')
     with tempfile.TemporaryDirectory(prefix='proxy-memory-') as tmp:
-        binary = str(Path(tmp) / 'dns-proxy')
+        binary = str(Path(tmp) / 'termux-http-proxy')
         subprocess.run(['cc', '-O2', '-o', binary, str(args.source)], check=True)
         result = {'units': 'KiB except Threads/counts', 'C': measure([binary], args.tunnels)}
         if args.bun_js:

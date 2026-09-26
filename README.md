@@ -178,7 +178,7 @@ from the folder where you cloned this repository, so keep that clone around;
 if you move it, set `CODEX_TERMUX_DIR` to the new location. Your settings and
 sign-in are retained.
 
-To pick up changes to the launcher or DNS proxy as well, pull this repository
+To pick up changes to the launcher or proxy as well, pull this repository
 and reinstall:
 
 ```bash
@@ -213,7 +213,7 @@ setup. Its built-in DNS resolver expects a conventional Linux setup (`/etc/resol
 so networking needs help.
 
 The launcher bridges this seamlessly:
-- Detects if the shared `termux-dns-proxy` daemon is active on `127.0.0.1:18080` and reuses
+- Detects if the shared proxy daemon (`termux-http-proxy`) is active on `127.0.0.1:18080` and reuses
   it immediately with zero startup delay and zero process proliferation.
 - If not running, it automatically spawns an ephemeral companion C proxy that resolves names
   through Android's bionic resolver and terminates when Codex exits.

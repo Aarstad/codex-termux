@@ -13,7 +13,7 @@ int test_connect(int fd, const struct sockaddr *addr, socklen_t len);
 #define connect test_connect
 #define main proxy_main
 #ifndef PROXY_SOURCE
-#define PROXY_SOURCE "../dns-proxy.c"
+#define PROXY_SOURCE "../termux-http-proxy.c"
 #endif
 #include PROXY_SOURCE
 #undef main

@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Run OpenAI's Codex CLI on Termux.
 #
-# Starts a bionic-side DNS proxy and points Codex at it, then runs the binary.
+# Starts a bionic-side proxy (termux-http-proxy) and points Codex at it, then runs the binary.
 #
 #   CODEX_NO_PROXY=1   use ambient proxy settings instead of starting one
 #   TERMUX_PROXY_TOKEN_FILE  proxy token (default ~/.config/termux-http-proxy/token)
@@ -18,7 +18,7 @@ set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 LIBEXEC="$PREFIX/libexec/codex"
 BIN="$LIBEXEC/codex"
-PROXY="$LIBEXEC/dns-proxy"
+PROXY="$LIBEXEC/termux-http-proxy"
 
 [ -x "$BIN" ] || { echo "codex: $BIN is missing — run install.sh" >&2; exit 1; }
 
@@ -79,7 +79,7 @@ if [ -z "${CODEX_NO_PROXY:-}" ]; then
         export all_proxy="$http_proxy"
       else
         PROXY_PID=""
-        echo "codex: DNS proxy did not start; login and network calls may fail" >&2
+        echo "codex: proxy did not start; login and network calls may fail" >&2
       fi
     fi
   fi

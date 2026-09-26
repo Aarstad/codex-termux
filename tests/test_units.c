@@ -8,7 +8,7 @@ int test_poll(struct pollfd *fds, nfds_t count, int timeout);
 #define poll test_poll
 #define main proxy_main
 #ifndef PROXY_SOURCE
-#define PROXY_SOURCE "../dns-proxy.c"
+#define PROXY_SOURCE "../termux-http-proxy.c"
 #endif
 #include PROXY_SOURCE
 #undef main

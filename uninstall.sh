@@ -27,7 +27,7 @@ rm -f "$PREFIX/bin/codex-update"
 
 freed="$(du -ms "$LIBEXEC" 2>/dev/null | cut -f1 || echo 0)"
 rm -rf "$LIBEXEC"
-say "removed the binaries and DNS proxy (${freed}MB)"
+say "removed the binaries and proxy (${freed}MB)"
 
 if [ "$DROP_CONFIG" = 1 ]; then
   rm -rf "$HOME/.codex"
