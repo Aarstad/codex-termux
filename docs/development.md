@@ -68,7 +68,8 @@ setup deadlines interrupted by signals, token authentication, header timeouts in
 `-f` mode, and (in `tests/test_event_loop.c`, against a fake resolver) that a
 stalled lookup does not block other clients. `PROXY_NETWORK_TESTS=1` adds lookups
 through Android's real resolver. To test another source copy, set `PROXY_SOURCE`
-to its path when running `tests/test_proxy.py`.
+to its path when running `tests/test_proxy.py`. The proxy and these tests come from
+[termux-http-proxy](https://github.com/Aarstad/termux-http-proxy); change them there first.
 
 Names are resolved with Android's asynchronous resolver, so a slow lookup no
 longer pauses existing tunnels; where it cannot be loaded the proxy falls back to
