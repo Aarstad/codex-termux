@@ -64,12 +64,18 @@ python3 tests/measure_memory.py --bun-js ../claude-code-termux-musl/libexec/dns-
 Tests require Python 3 and a C compiler with AddressSanitizer support. They cover
 HTTP header/body forwarding, early CONNECT payload, unsupported chunked requests,
 connection refusal, bidirectional backpressure, half-closes, buffered-peer cleanup,
-and setup deadlines interrupted by signals. To test another source copy, set
-`PROXY_SOURCE` to its path when running `tests/test_proxy.py`.
+setup deadlines interrupted by signals, token authentication, header timeouts in
+`-f` mode, and (in `tests/test_event_loop.c`, against a fake resolver) that a
+stalled lookup does not block other clients. `PROXY_NETWORK_TESTS=1` adds lookups
+through Android's real resolver. To test another source copy, set `PROXY_SOURCE`
+to its path when running `tests/test_proxy.py`.
 
-TCP connection attempts share a five-second deadline across resolved addresses;
-each setup write also has a five-second deadline. DNS resolution still blocks in
-bionic, and setup can pause existing tunnels. Plain HTTP `Transfer-Encoding`
+Names are resolved with Android's asynchronous resolver, so a slow lookup no
+longer pauses existing tunnels; where it cannot be loaded the proxy falls back to
+blocking `getaddrinfo`. TCP connection attempts share a five-second deadline
+across resolved addresses, each getting an equal share; each setup write also has
+a five-second deadline. `--auth-file PATH` makes the proxy require a token, since
+any app on the device can reach loopback. Plain HTTP `Transfer-Encoding`
 requests receive **501** before connecting upstream because this proxy does not
 decode their framing. HTTPS inside CONNECT tunnels is unaffected. The HTTP path
 requests `Connection: close`; it is not a general-purpose HTTP framing parser.
